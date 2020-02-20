@@ -7,18 +7,15 @@ import org.apache.kafka.common.serialization.Serdes
 import org.apache.kafka.streams.KafkaStreams
 import org.apache.kafka.streams.KeyValue
 import org.apache.kafka.streams.StreamsBuilder
-import org.apache.kafka.streams.kstream.Grouped
-import org.apache.kafka.streams.kstream.Produced
 import org.apache.kafka.streams.StreamsConfig
 import org.apache.kafka.streams.Topology
 import org.apache.kafka.streams.kstream.Consumed
-import org.apache.kafka.streams.kstream.Initializer
-import org.apache.kafka.streams.kstream.Materialized
+import org.apache.kafka.streams.kstream.Grouped
+import org.apache.kafka.streams.kstream.Produced
 import org.apache.kafka.streams.kstream.TimeWindows
-import org.apache.kafka.streams.kstream.Windowed
 import java.time.Duration
+import java.time.Instant
 import java.util.Properties
-import java.util.concurrent.TimeUnit
 
 
 /**
@@ -44,10 +41,18 @@ private fun createTopology(builder: StreamsBuilder): Topology {
         .map { _, value ->
             val data = objectMapper.readValue<TickerDetails>(value)
             KeyValue(data.sector.name, data.price)
-        }.peek {k, v ->
-            println("$k = $v")
         }.groupByKey(Grouped.with(Serdes.String(), Serdes.Double()))
-        .reduce { v1, v2 -> v1 + v2 / 2 }.toStream().peek { k, v ->
+        .windowedBy(TimeWindows.of(Duration.ofSeconds(5)))
+        .reduce { a, b -> a + b / 2 }
+        .toStream()
+        .map { key, value ->
+            KeyValue(
+                "${key.key()}@${Instant.ofEpochMilli(key.window().start())}->${Instant.ofEpochMilli(
+                    key.window().end()
+                )}", value
+            )
+        }
+        .peek { k, v ->
             println("\t\tPost reduce: $k = $v")
         }.to("avg-price-per-sector", Produced.with(Serdes.String(), Serdes.Double()))
     return builder.build()

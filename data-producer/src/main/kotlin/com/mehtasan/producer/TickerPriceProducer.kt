@@ -47,7 +47,7 @@ private fun publishData(
     val future = producer.send(
         ProducerRecord("ticker-price", sector.name, serializedTickerDetails)
     )
-    //Thread.sleep(200)
+    Thread.sleep(200)
     return@mapToObj serializedTickerDetails to future
 }
 
