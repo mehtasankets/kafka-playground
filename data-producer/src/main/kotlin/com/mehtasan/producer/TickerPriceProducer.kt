@@ -1,15 +1,12 @@
 package com.mehtasan.producer
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.SerializationConfig
-import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.clients.producer.Producer
 import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.clients.producer.RecordMetadata
-import org.apache.kafka.common.serialization.IntegerSerializer
 import org.apache.kafka.common.serialization.StringSerializer
 import java.util.Properties
 import java.util.concurrent.Future
@@ -46,14 +43,23 @@ private fun publishData(
     objectMapper: ObjectMapper,
     producer: Producer<String, String>
 ): Stream<Pair<String, Future<RecordMetadata>>> = IntStream.range(1000, 2000).mapToObj {
+    val (sector, serializedTickerDetails) = generateRow(it, objectMapper)
+    val future = producer.send(
+        ProducerRecord("ticker-price", sector.name, serializedTickerDetails)
+    )
+    //Thread.sleep(200)
+    return@mapToObj serializedTickerDetails to future
+}
+
+private fun generateRow(
+    it: Int, objectMapper: ObjectMapper
+): Pair<Sector, String> {
     val sector = Sector.values()[it % Sector.values().size]
     val tickerDetails = TickerDetails(
         "Symbol-${it.toString().padStart(3, '0')}", sector, Random.nextDouble(100.0, 5000.0)
     )
     val serializedTickerDetails = objectMapper.writeValueAsString(tickerDetails)
-    return@mapToObj serializedTickerDetails to producer.send(
-        ProducerRecord("ticker-price", sector.name, serializedTickerDetails)
-    )
+    return Pair(sector, serializedTickerDetails)
 }
 
 fun createProducer(): Producer<String, String> {
